@@ -22,6 +22,7 @@
         variable = "$BRUH";
         placeholder = "PLACEHOLDER";
         file-to-replace = "${docroot}/overview.json";
+        statics = pkgs.copyPathToStore ./public/.;
 
         httpdconf = pkgs.writeText "lighttpd.conf" ''
           server.modules = (
@@ -31,7 +32,14 @@
           server.document-root = "${docroot}"
           server.port = ${port}
         '';
-        statics = pkgs.copyPathToStore ./public/.;
+        httpdconf-noreplacing = pkgs.writeText "lighttpd.conf" ''
+           server.modules = (
+            "mod_accesslog"
+          )
+          accesslog.filename = "/dev/fd/2"
+          server.document-root = "${statics}"
+          server.port = ${port}
+        '';
       in
       {
         packages = {
@@ -45,14 +53,25 @@
             sed -i "s=${placeholder}=${variable}=g" ${file-to-replace}
             exec lighttpd -D -f ${httpdconf}
           '';
-          default = pkgs.dockerTools.buildImage {
+          docker-replacing = pkgs.dockerTools.buildImage {
             name = "webserver-with-statics";
             tag = "latest"; 
             config = {
-              Env = [ "$BRUH=aisughd" ];
+              Env = [ "BRUH=" ];
               Cmd = [ (pkgs.lib.getExe self.packages.${system}.webserver) ];
             };
           };
+          docker-noreplacing = pkgs.dockerTools.buildImage {
+            name = "webserver-with-statics";
+            tag = "slim";
+            config.Cmd = [ (pkgs.lib.getExe lighttpd-nossl) "-D" "-f" httpdconf-noreplacing ];
+          };
+          docker-veryslim = pkgs.dockerTools.buildImage {
+            name = "webserver-with-statics";
+            tag = "slimmest";
+            config.Cmd = [ "${muslpkgs.busybox}/bin/httpd" "-vv" "-f" "-p" port "-h" statics ];
+          };
+          default = self.packages.${system}.docker-noreplacing;
         };
       }
     );
