@@ -19,7 +19,15 @@
 
         port = "3000";
         docroot = "/tmp/webserver";
+        variable = "$BRUH";
+        placeholder = "PLACEHOLDER";
+        file-to-replace = "${docroot}/overview.json";
+
         httpdconf = pkgs.writeText "lighttpd.conf" ''
+          server.modules = (
+            "mod_accesslog"
+          )
+          accesslog.filename = "/dev/fd/2"
           server.document-root = "${docroot}"
           server.port = ${port}
         '';
@@ -29,17 +37,19 @@
         packages = {
           webserver = pkgs.writeScriptBin "webserver" ''
             #!${muslpkgs.busybox}/bin/sh
-            ${muslpkgs.busybox}/bin/echo will use port ${port}...
-            ${muslpkgs.busybox}/bin/mkdir -p ${docroot}
-            ${muslpkgs.busybox}/bin/install -Dm644 ${statics}/* -t ${docroot}
-            ${muslpkgs.busybox}/bin/sed -i "s/PLACEHOLDER/$BRUH/g" ${docroot}/test.html
-            exec ${lighttpd-nossl}/bin/lighttpd -D -f ${httpdconf}
+            set -eu
+            export PATH=${muslpkgs.busybox}/bin/:${lighttpd-nossl}/bin/:$PATH
+            echo will use port ${port}...
+            mkdir -p ${docroot}
+            install -Dm644 ${statics}/* -t ${docroot}
+            sed -i "s=${placeholder}=${variable}=g" ${file-to-replace}
+            exec lighttpd -D -f ${httpdconf}
           '';
           default = pkgs.dockerTools.buildImage {
             name = "webserver-with-statics";
             tag = "latest"; 
             config = {
-              Env = [ "BRUH=aisughd" ];
+              Env = [ "$BRUH=aisughd" ];
               Cmd = [ (pkgs.lib.getExe self.packages.${system}.webserver) ];
             };
           };
